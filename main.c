@@ -28,13 +28,18 @@ PN1 LED indicates Q
 #define	NVIC_ST_RELOAD_R	(*((volatile uint32_t *) 0xE000E014))
 #define	NVIC_ST_CURRENT_R	(*((volatile uint32_t *) 0xE000E018))
 
+unsigned int LED0_MASK = 0x02;
+unsigned int LED1_MASK = 0x01;
+unsigned int LED2_MASK = 0x10;
+unsigned int LED3_MASK = 0x01;
+
+
 void delay(int);
 void GPIO_Init(void);
 void SysTick_Init(void);
 void SysTick_Wait(unsigned long);
 void SysTick_Wait1s(unsigned long);
-void DisplayCount(unsigned int count);
-
+void DisplayCount(unsigned int);
 
 void GPIO_Init(void){
   SYSCTL_RCGCGPIO_R = 0x1120; // enable clock
@@ -53,14 +58,15 @@ void SysTick_Init(void){
 	NVIC_ST_CTRL_R = 0;							// disable SysTick
 	NVIC_ST_RELOAD_R = 0xFFFFFF; // the maximum value
 	NVIC_ST_CURRENT_R = 0;				// set current value is 0
-	NVIC_ST_CTRL_R = 1;				// enable SysTick
+	NVIC_ST_CTRL_R = 5;				// enable SysTick and set clock source to internal
 }
 
 
 void SysTick_Wait(unsigned long delay){
+	NVIC_ST_RELOAD_R = delay; // reset RELOAD register value 
+	NVIC_ST_CURRENT_R = 0;	// set current register=0 make the timer to start counting
 	NVIC_ST_RELOAD_R = 0; // reset RELOAD register value 
-	NVIC_ST_CURRENT_R = delay;	// set current register=0 make the timer to start counting
-	while((NVIC_ST_CTRL_R & 16) == 0){		//check if the count flag has set (We have finished the count)
+	while(NVIC_ST_CURRENT_R > 0){		//check if the count flag has set (We have finished the count)
 	}
 }
 
@@ -72,37 +78,62 @@ void SysTick_Wait1s(unsigned long delay){
 }
 
 
-void DisplayCount(unsigned int count){
-	
-	uint8_t LED1and2;
-	
-	LED1and2 = 0x03 & count;		// Mask the first two bits
-	GPIO_PORTN_DATA_R = LED1and2;		// Set LEDs (Quick and dirty. Should not reset every GPIO on this register, needs a proper mask)
-
-	//Both LED
-	if(count & 0xC)
-		GPIO_PORTF_DATA_R = 0x0011;		// Set LEDs
-	
-	// LED 4
-	else if(count & 8)
-		GPIO_PORTF_DATA_R = 0x0010;		// Set LEDs
-	
-	// LED 3
-	else if(count & 4)
-		GPIO_PORTF_DATA_R = 0x0001;		// Set LEDs
-
-}//DisplayCount
-
-
 int main(){
 	GPIO_Init();
 	SysTick_Init();
 	//needs 4 variables to store bit value for each LED (Do I really?)
+
+  unsigned int bit0 = 0;
+	unsigned int bit1 = 0;
+	unsigned int bit2 = 0;
+	unsigned int bit3 = 0;
 	unsigned int value = 0;
 	while(1){
-		while(value<15){
+		while(value<16){
 			SysTick_Wait1s(1);
-			DisplayCount(value);
+
+			bit0 = value & 0x01;
+			bit1 = value & 0x02;
+			bit2 = value & 0x04;
+			bit3 = value & 0x08;
+			
+			uint32_t tempreg;
+			
+			tempreg = GPIO_PORTN_DATA_R;
+
+			if(bit0 >= 1){
+				GPIO_PORTN_DATA_R = tempreg | LED0_MASK;
+			}
+			else{
+				GPIO_PORTN_DATA_R = tempreg & ~LED0_MASK;
+			}
+			tempreg = GPIO_PORTN_DATA_R;
+
+			if(bit1 > 1){
+				GPIO_PORTN_DATA_R = tempreg | LED1_MASK;
+			}
+			else{
+				GPIO_PORTN_DATA_R = tempreg & ~LED1_MASK;
+			}
+				
+			tempreg = GPIO_PORTF_DATA_R;
+			
+			if(bit2 > 1){
+				GPIO_PORTF_DATA_R = tempreg | LED2_MASK;
+			}
+			else{
+				GPIO_PORTF_DATA_R = tempreg & ~LED2_MASK;
+			}
+			
+			tempreg = GPIO_PORTF_DATA_R;
+
+			if(bit3 > 1){
+				GPIO_PORTF_DATA_R = tempreg | LED3_MASK;
+			}
+			else{
+				GPIO_PORTF_DATA_R = tempreg & ~LED3_MASK;
+			}
+			
 			value++;
 		}
 		value = 0;
